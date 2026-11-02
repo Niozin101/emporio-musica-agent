@@ -17,9 +17,9 @@ from src.tools import FERRAMENTAS, data_referencia
 MODELO_PADRAO = "gemini-3.5-flash"
 # No plano gratuito cada modelo tem cota diária própria (~20 requisições). Quando a cota de um
 # acaba ou ele fica sobrecarregado, o agente segue a conversa com o próximo da lista.
-MODELOS_RESERVA_PADRAO = "gemini-3.7-flash,gemini-3.5-flash-lite,gemini-3.1-flash-lite"
+MODELOS_RESERVA_PADRAO = "gemini-3.5-flash-lite,gemini-3.7-flash,gemini-3.1-flash-lite"
 MAX_CHAMADAS_FERRAMENTAS = 8
-TIMEOUT_MS = 90_000
+TIMEOUT_MS = 30_000
 # Erros transitórios (limite por minuto, sobrecarga, tempo esgotado): vale esperar e tentar de novo.
 CODIGOS_TRANSITORIOS = {429, 500, 503, 504}
 ESPERAS_ENTRE_TENTATIVAS = [2, 5]
@@ -36,8 +36,10 @@ def _cota_diaria_esgotada(erro: errors.APIError) -> bool:
 
 
 class AgenteEmporio:
-    def __init__(self, modelo: str | None = None):
+    def __init__(self, modelo: str | None = None, ao_evento=None):
+        """ao_evento: função opcional chamada a cada evento (tool chamada, nova tentativa, troca de modelo)."""
         load_dotenv()
+        self._ao_evento = ao_evento
         principal = modelo or os.getenv("MODEL", MODELO_PADRAO)
         reservas = os.getenv("MODELOS_RESERVA", MODELOS_RESERVA_PADRAO).split(",")
         self._modelos = list(dict.fromkeys([principal, *(m.strip() for m in reservas if m.strip())]))
@@ -53,6 +55,11 @@ class AgenteEmporio:
     def modelo(self) -> str:
         return self._modelos[self._indice_modelo]
 
+    def _evento(self, descricao: str) -> None:
+        self._chamadas.append(descricao)
+        if self._ao_evento:
+            self._ao_evento(descricao)
+
     def _registrar(self, funcao):
         """Envolve a ferramenta para registrar cada chamada (nome + argumentos) para log e depuração.
 
@@ -61,7 +68,7 @@ class AgenteEmporio:
         @functools.wraps(funcao)
         def envolvida(*args, **kwargs):
             argumentos = ", ".join(f"{k}={v!r}" for k, v in kwargs.items())
-            self._chamadas.append(f"{funcao.__name__}({argumentos})")
+            self._evento(f"{funcao.__name__}({argumentos})")
             return funcao(*args, **kwargs)
         return envolvida
 
@@ -86,7 +93,7 @@ class AgenteEmporio:
         historico = self._chat.get_history()
         self._indice_modelo += 1
         self._chat = self._client.chats.create(model=self.modelo, config=self._config, history=historico)
-        self._chamadas.append(f"[trocando para o modelo {self.modelo}]")
+        self._evento(f"[trocando para o modelo {self.modelo}]")
         return True
 
     def _enviar(self, mensagem: str):
@@ -100,8 +107,10 @@ class AgenteEmporio:
                         raise
                     ultimo_erro = erro
                     if _cota_diaria_esgotada(erro) or espera is None:
+                        motivo = "cota diária esgotada" if _cota_diaria_esgotada(erro) else f"API {erro.code}"
+                        self._evento(f"[{self.modelo}: {motivo}]")
                         break  # esperar não resolve: tenta outro modelo
-                    self._chamadas.append(f"[API {erro.code} no {self.modelo}, nova tentativa em {espera}s]")
+                    self._evento(f"[API {erro.code} no {self.modelo}, nova tentativa em {espera}s]")
                     time.sleep(espera)
             if not self._trocar_modelo():
                 raise ultimo_erro

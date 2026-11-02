@@ -36,7 +36,7 @@ class Transcricao:
         self._escrever(f"**Lia:** {resposta.texto}\n")
 
 
-def conversar(agente: AgenteEmporio, mensagens, debug: bool) -> None:
+def conversar(agente: AgenteEmporio, mensagens) -> None:
     transcricao = Transcricao(agente.modelo)
     for mensagem in mensagens:
         mensagem = mensagem.strip()
@@ -50,10 +50,12 @@ def conversar(agente: AgenteEmporio, mensagens, debug: bool) -> None:
             print("(nova conversa iniciada)\n")
             continue
 
-        resposta = agente.responder(mensagem)
-        if debug:
-            for chamada in resposta.ferramentas:
-                print(f"  🔧 {chamada}")
+        print("  (Lia está digitando...)", flush=True)
+        try:
+            resposta = agente.responder(mensagem)
+        except KeyboardInterrupt:
+            print("\n(interrompido)")
+            break
         print(f"Lia: {resposta.texto}\n")
         transcricao.registrar(mensagem, resposta)
     print(f"(conversa salva em {transcricao.arquivo})")
@@ -75,7 +77,9 @@ def main() -> None:
     parser.add_argument("--roteiro", type=Path, help="arquivo com uma mensagem do cliente por linha")
     args = parser.parse_args()
 
-    agente = AgenteEmporio()
+    # No modo debug (e no modo roteiro), cada tool chamada e cada nova tentativa aparece na hora.
+    mostrar_eventos = args.debug or args.roteiro
+    agente = AgenteEmporio(ao_evento=(lambda e: print(f"  🔧 {e}", flush=True)) if mostrar_eventos else None)
     if args.roteiro:
         # utf-8-sig ignora o BOM que alguns editores do Windows colocam no início do arquivo.
         linhas = args.roteiro.read_text(encoding="utf-8-sig").splitlines()
@@ -84,10 +88,10 @@ def main() -> None:
                 if linha.strip():
                     print(f"Você: {linha}")
                     yield linha
-        conversar(agente, ecoar(), debug=True)
+        conversar(agente, ecoar())
     else:
         print("Lia, da Empório da Música 🎸  (digite /nova para recomeçar ou /sair para encerrar)\n")
-        conversar(agente, mensagens_interativas(), debug=args.debug)
+        conversar(agente, mensagens_interativas())
 
 
 if __name__ == "__main__":
