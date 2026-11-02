@@ -1,0 +1,16 @@
+# Paleta extraída do design do manual de políticas da loja (data/politicas_da_loja.pdf):
+# azul petróleo #1A5276 (títulos), azul médio #2E86C1 (subtítulos), âmbar #F39C12 (divisórias),
+# grafite #2C3E50 (texto) e azul quase branco #F2F8FC (fundo das tabelas).
+[theme]
+base = "light"
+primaryColor = "#1A5276"
+textColor = "#2C3E50"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F2F8FC"
+
+[client]
+# Esconde o menu de desenvolvedor (botão "Deploy") para a tela parecer um produto.
+toolbarMode = "viewer"
+
+[browser]
+gatherUsageStats = false

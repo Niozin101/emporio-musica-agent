@@ -1,0 +1,224 @@
+/* Identidade visual inspirada no manual de políticas da loja (cores extraídas do PDF). */
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap');
+
+:root {
+  --azul-petroleo: #1A5276;
+  --azul-medio: #2E86C1;
+  --ambar: #F39C12;
+  --grafite: #2C3E50;
+  --cinza: #7F8C8D;
+  --azul-claro: #F2F8FC;
+  --fonte-titulo: 'Poppins', 'Source Sans Pro', sans-serif;
+}
+
+/* Fundo da página: degradê suave do azul claro para o branco */
+[data-testid="stAppViewContainer"] {
+  background: linear-gradient(180deg, #E8F1F8 0%, #F7FAFC 35%, #FFFFFF 100%);
+}
+[data-testid="stHeader"] {
+  background: transparent;
+}
+
+/* ---------- Cabeçalho em faixa, como a capa do manual ---------- */
+.em-cabecalho {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(120deg, var(--azul-petroleo) 0%, var(--azul-medio) 100%);
+  border-bottom: 6px solid var(--ambar);
+  border-radius: 20px;
+  padding: 1.8rem 2rem 1.5rem;
+  margin-bottom: 1.4rem;
+  color: #FFFFFF;
+  box-shadow: 0 12px 30px rgba(26, 82, 118, 0.25);
+}
+/* Notas musicais decorativas ao fundo */
+.em-cabecalho::after {
+  content: "♪ ♫ ♬";
+  position: absolute;
+  right: -0.5rem;
+  top: -1.2rem;
+  font-size: 6.5rem;
+  letter-spacing: -0.5rem;
+  color: rgba(255, 255, 255, 0.10);
+  transform: rotate(-12deg);
+  pointer-events: none;
+}
+.em-cabecalho .em-marca {
+  font-family: var(--fonte-titulo);
+  font-size: 2.2rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  line-height: 1.05;
+}
+.em-cabecalho .em-marca span {
+  color: var(--ambar);
+}
+.em-cabecalho .em-slogan {
+  font-family: var(--fonte-titulo);
+  font-style: italic;
+  opacity: 0.9;
+  margin-top: 0.3rem;
+}
+.em-cabecalho .em-lia {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 1rem;
+  padding: 0.35rem 0.9rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(4px);
+  font-size: 0.9rem;
+}
+
+/* Equalizador animado: "a Lia está ao vivo" */
+.em-eq {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 14px;
+}
+.em-eq i {
+  display: block;
+  width: 3px;
+  height: 100%;
+  background: var(--ambar);
+  border-radius: 2px;
+  transform-origin: bottom;
+  animation: em-pulsar 1s ease-in-out infinite;
+}
+.em-eq i:nth-child(2) { animation-delay: 0.2s; }
+.em-eq i:nth-child(3) { animation-delay: 0.4s; }
+.em-eq i:nth-child(4) { animation-delay: 0.1s; }
+@keyframes em-pulsar {
+  0%, 100% { transform: scaleY(0.3); }
+  50% { transform: scaleY(1); }
+}
+
+/* ---------- Cartões de atalho da tela inicial ---------- */
+.em-titulo-atalhos {
+  font-family: var(--fonte-titulo);
+  font-weight: 600;
+  color: var(--azul-petroleo);
+  margin: 0.6rem 0 0.4rem;
+}
+[class*="st-key-atalho"] button {
+  min-height: 5.2rem;
+  border-radius: 16px;
+  border: 1px solid #D6E6F2;
+  background: #FFFFFF;
+  box-shadow: 0 4px 14px rgba(26, 82, 118, 0.08);
+  transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+}
+[class*="st-key-atalho"] button p {
+  font-family: var(--fonte-titulo);
+  font-size: 0.95rem;
+  color: var(--grafite);
+}
+[class*="st-key-atalho"] button:hover {
+  transform: translateY(-3px);
+  border-color: var(--ambar);
+  box-shadow: 0 10px 22px rgba(243, 156, 18, 0.18);
+}
+
+/* ---------- Balões ---------- */
+[data-testid="stChatMessage"] {
+  box-shadow: 0 3px 12px rgba(44, 62, 80, 0.06);
+}
+[class*="st-key-msg-lia"] [data-testid="stChatMessage"] {
+  background: #FFFFFF;
+  border: 1px solid #DCE9F3;
+  border-left: 5px solid var(--azul-petroleo);
+  border-radius: 6px 18px 18px 18px;
+}
+[class*="st-key-msg-cliente"] [data-testid="stChatMessage"] {
+  background: linear-gradient(120deg, #FEF5E7 0%, #FDEBD0 100%);
+  border: 1px solid #F8D9A8;
+  border-radius: 18px 6px 18px 18px;
+  width: 85%;
+  margin-left: auto;
+}
+
+/* "Consultas feitas": discreto, em tom de bastidor */
+[data-testid="stExpander"] details {
+  border: 1px dashed #BDC3C7;
+  border-radius: 12px;
+  background: #FBFCFD;
+}
+[data-testid="stExpander"] summary p {
+  color: var(--cinza);
+  font-size: 0.85rem;
+}
+[data-testid="stExpander"] pre {
+  background: #EAF2F8 !important;
+  border-radius: 8px;
+}
+
+/* ---------- Caixa de mensagem ---------- */
+[data-testid="stChatInput"] > div {
+  border: 2px solid var(--azul-medio);
+  border-radius: 18px;
+  background: #FFFFFF;
+  box-shadow: 0 6px 20px rgba(46, 134, 193, 0.15);
+}
+[data-testid="stChatInput"] > div:focus-within {
+  border-color: var(--ambar);
+  box-shadow: 0 0 0 4px rgba(243, 156, 18, 0.2);
+}
+[data-testid="stChatInputSubmitButton"] {
+  background: var(--ambar);
+  color: #FFFFFF;
+  border-radius: 12px;
+}
+
+/* ---------- Barra lateral ---------- */
+[data-testid="stSidebar"] {
+  background: linear-gradient(180deg, #FFFFFF 0%, var(--azul-claro) 100%);
+  border-right: 1px solid #DCE9F3;
+}
+[data-testid="stSidebar"] h2,
+[data-testid="stSidebar"] h3 {
+  font-family: var(--fonte-titulo);
+  color: var(--azul-petroleo);
+}
+[data-testid="stSidebar"] .stButton button {
+  border-radius: 12px;
+  border: 1px solid #D6E6F2;
+  background: #FFFFFF;
+  justify-content: flex-start;
+  text-align: left;
+  transition: border-color 0.15s, transform 0.15s;
+}
+[data-testid="stSidebar"] .stButton button:hover {
+  border-color: var(--ambar);
+  color: var(--azul-petroleo);
+  transform: translateX(3px);
+}
+[class*="st-key-nova-conversa"] button {
+  background: var(--ambar) !important;
+  border-color: var(--ambar) !important;
+  color: #FFFFFF !important;
+  font-weight: 600;
+  justify-content: center !important;
+}
+.em-rodape-lateral {
+  color: var(--cinza);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+/* ---------- Telas estreitas (celular) ---------- */
+@media (max-width: 640px) {
+  [class*="st-key-msg-cliente"] [data-testid="stChatMessage"] {
+    width: 100%;
+  }
+  .em-cabecalho {
+    padding: 1.3rem 1.2rem 1.1rem;
+  }
+  .em-cabecalho .em-marca {
+    font-size: 1.5rem;
+  }
+  .em-cabecalho::after {
+    font-size: 4rem;
+  }
+}
