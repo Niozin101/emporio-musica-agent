@@ -67,6 +67,12 @@ python main.py --roteiro examples/roteiros/04_devolucao_arrependimento.txt   # r
 ```
 Na conversa interativa, `/nova` recomeça o atendimento e `/sair` encerra. Toda conversa é salva em Markdown em `logs/conversas/`. As conversas de roteiro são salvas em `examples/`.
 
+### Interface web (opcional)
+```bash
+streamlit run app.py
+```
+Abre em `http://localhost:8501` um chat com cartões de atalho, perguntas de exemplo e, embaixo de cada resposta, **"Consultas feitas"**: as ferramentas que a Lia chamou para responder. A paleta de cores foi extraída do design do manual de políticas da loja (azul petróleo `#1A5276`, azul médio `#2E86C1` e âmbar `#F39C12`), para a interface seguir a identidade visual do material oficial. O manual não traz um guia de marca; as cores foram inferidas do próprio PDF.
+
 ---
 
 ## Arquitetura
@@ -104,6 +110,7 @@ Na conversa interativa, `/nova` recomeça o atendimento e `/sair` encerra. Toda 
 | `src/prompts.py` | System prompt da persona Lia e o contexto dinâmico (data, hora, loja aberta ou fechada) |
 | `src/agent.py` | Sessão de chat com o Gemini, registro das ferramentas chamadas, novas tentativas e troca de modelo |
 | `main.py` | Interface de linha de comando e transcrição das conversas |
+| `app.py` | Interface web (Streamlit), com as ferramentas chamadas visíveis em cada resposta |
 
 ---
 
@@ -161,8 +168,8 @@ O system prompt (`src/prompts.py`) segue as diretrizes da seção 7 do manual:
 - **Entre sessões:** não há memória persistente. Num atendimento por mensagens, cada contato costuma ser independente, e guardar conversas exigiria política de retenção (LGPD). As conversas são **salvas em Markdown** em `logs/` apenas para auditoria e depuração.
 - Reclamações são registradas em `logs/reclamacoes.jsonl` com um protocolo, simulando o encaminhamento para a equipe.
 
-### 8. Interface: CLI
-O foco do desafio é o agente. A CLI tem modo interativo, modo `--debug` (mostra as ferramentas chamadas em tempo real) e modo `--roteiro`, que gera as conversas de exemplo de forma reprodutível.
+### 8. Interfaces: CLI + Streamlit
+O foco do desafio é o agente. A CLI tem modo interativo, modo `--debug` (mostra as ferramentas chamadas em tempo real) e modo `--roteiro`, que gera as conversas de exemplo de forma reprodutível. A interface web em Streamlit reaproveita o mesmo `AgenteEmporio`, sem mudar nada no agente, e torna visível a decisão central do desafio: em cada resposta, quais ferramentas de dados ou de políticas a Lia consultou. O agente e o histórico ficam em `st.session_state`, então cada aba do navegador tem sua própria conversa.
 
 ---
 
