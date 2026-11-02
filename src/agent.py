@@ -6,6 +6,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime
 
+import httpx
 from dotenv import load_dotenv
 from google import genai
 from google.genai import errors, types
@@ -31,8 +32,22 @@ class Resposta:
     ferramentas: list[str] = field(default_factory=list)
 
 
-def _cota_diaria_esgotada(erro: errors.APIError) -> bool:
-    return erro.code == 429 and "per day" in str(erro.message).lower()
+# Falhas de rede (ex.: tempo de leitura esgotado) chegam como exceções do httpx, não como APIError.
+ERROS_DE_REDE = (httpx.TimeoutException, httpx.NetworkError)
+
+
+def _descrever(erro: Exception) -> str:
+    if isinstance(erro, errors.APIError):
+        return f"API {erro.code}"
+    return f"rede: {type(erro).__name__}"
+
+
+def _transitorio(erro: Exception) -> bool:
+    return isinstance(erro, ERROS_DE_REDE) or (isinstance(erro, errors.APIError) and erro.code in CODIGOS_TRANSITORIOS)
+
+
+def _cota_diaria_esgotada(erro: Exception) -> bool:
+    return isinstance(erro, errors.APIError) and erro.code == 429 and "per day" in str(erro.message).lower()
 
 
 class AgenteEmporio:
@@ -102,15 +117,15 @@ class AgenteEmporio:
             for espera in [*ESPERAS_ENTRE_TENTATIVAS, None]:
                 try:
                     return self._chat.send_message(mensagem)
-                except errors.APIError as erro:
-                    if erro.code not in CODIGOS_TRANSITORIOS:
+                except (errors.APIError, *ERROS_DE_REDE) as erro:
+                    if not _transitorio(erro):
                         raise
                     ultimo_erro = erro
                     if _cota_diaria_esgotada(erro) or espera is None:
-                        motivo = "cota diária esgotada" if _cota_diaria_esgotada(erro) else f"API {erro.code}"
+                        motivo = "cota diária esgotada" if _cota_diaria_esgotada(erro) else _descrever(erro)
                         self._evento(f"[{self.modelo}: {motivo}]")
                         break  # esperar não resolve: tenta outro modelo
-                    self._evento(f"[API {erro.code} no {self.modelo}, nova tentativa em {espera}s]")
+                    self._evento(f"[{_descrever(erro)} no {self.modelo}, nova tentativa em {espera}s]")
                     time.sleep(espera)
             if not self._trocar_modelo():
                 raise ultimo_erro
@@ -119,9 +134,9 @@ class AgenteEmporio:
         self._chamadas = []
         try:
             resposta = self._enviar(mensagem)
-        except errors.APIError as erro:
+        except (errors.APIError, *ERROS_DE_REDE) as erro:
             texto = "Tive um problema técnico aqui e não consegui consultar o sistema. Pode tentar de novo em instantes?"
-            return Resposta(texto=texto, ferramentas=[*self._chamadas, f"ERRO API {erro.code}: {erro.message}"])
+            return Resposta(texto=texto, ferramentas=[*self._chamadas, f"ERRO API ({_descrever(erro)}): {erro}"])
 
         texto = (resposta.text or "").strip()
         if not texto:
