@@ -70,18 +70,34 @@ def _situacao(produto) -> str:
     return "Disponível"
 
 
+def _parcelamento_maximo(preco: float) -> dict:
+    """Maior número de parcelas sem juros respeitando a parcela mínima do manual (seção 3.1).
+
+    Suposição: "até 3x sem valor mínimo (exceto abaixo de R$ 50)" = parcela mínima de R$ 50 até 3x.
+    """
+    for vezes in range(12, 0, -1):
+        minimo = 100 if vezes >= 7 else 80 if vezes >= 4 else 50
+        if preco / vezes >= minimo or vezes == 1:
+            return {"vezes": vezes, "valor_parcela": round(preco / vezes, 2)}
+
+
 def _resumo_produto(produto) -> dict:
+    preco_final = float(produto["preco_final"])
     resumo = {
         "produto_id": int(produto["product_id"]),
         "nome": produto["name"],
         "categoria": produto["categoria"],
-        "preco_final": float(produto["preco_final"]),
+        "preco_final": preco_final,
         "situacao": _situacao(produto),
+        "parcelamento_maximo_sem_juros": _parcelamento_maximo(preco_final),
     }
     if produto["desconto_pct"] > 0:
         resumo["preco_original"] = float(produto["price_brl"])
         resumo["desconto_pct"] = int(produto["desconto_pct"])
         resumo["promocao"] = produto["nome_promocao"]
+        resumo["preco_pix"] = "Desconto de 5% no PIX não se aplica: promoções não são cumulativas."
+    else:
+        resumo["preco_pix"] = round(preco_final * 0.95, 2)
     return resumo
 
 
