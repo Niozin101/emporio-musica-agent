@@ -1,96 +1,101 @@
-# Empório da Música: agente de atendimento
+# Empório da Música: customer service agent
 
-Protótipo de um agente de atendimento por mensagens de texto para a **Empório da Música**, loja de instrumentos musicais em Campo Grande/MS. A assistente virtual **Lia** responde dúvidas sobre catálogo, preços, promoções, pedidos e políticas da loja. Ela consulta os dados operacionais (CSVs) e o manual de políticas (PDF) por meio de *function calling*.
+> 🇧🇷 [Versão em português](README.pt-BR.md)
+
+A prototype of a text-message customer service agent for **Empório da Música**, a musical instrument store in Campo Grande, Brazil. The virtual assistant **Lia** answers questions about the catalog, prices, promotions, orders and store policies. She looks up the operational data (CSVs) and the policy manual (PDF) through *function calling*.
 
 ```
-Você: Quanto custa o Takamine GD20? E no PIX?
+Customer: Quanto custa o Takamine GD20? E no PIX?
   🔧 buscar_produtos(termo='takamine gd20')
 Lia: O violão Takamine GD20 Dreadnought Natural custa R$ 2.199,00 (ou em até 12x de R$ 183,25 sem juros).
 No PIX, ele fica por R$ 2.089,05 (com 5% de desconto). Ele está disponível em estoque! 😉
 ```
+*(Customer: "How much is the Takamine GD20? And with PIX?" Lia gives the price, the PIX price with the 5% discount and the 12 interest-free installments, all computed by the code.)*
+
+> **About languages:** this documentation is in English, as requested for the submission. The agent itself talks to customers in **Brazilian Portuguese**, because the store and its customers are in Brazil; the system prompt, the example conversations and the code identifiers are therefore in Portuguese.
 
 ---
 
-## Sumário
-- [Como rodar](#como-rodar)
-- [Arquitetura](#arquitetura)
-- [Decisões técnicas](#decisões-técnicas)
-- [Tratamento dos dados e inconsistências encontradas](#tratamento-dos-dados-e-inconsistências-encontradas)
-- [Exemplos de conversa](#exemplos-de-conversa)
-- [Limitações conhecidas e próximos passos](#limitações-conhecidas-e-próximos-passos)
-- [Uso de assistentes de código (IA)](#uso-de-assistentes-de-código-ia)
+## Contents
+- [How to run](#how-to-run)
+- [Architecture](#architecture)
+- [Technical decisions](#technical-decisions)
+- [Data handling and inconsistencies found](#data-handling-and-inconsistencies-found)
+- [Example conversations](#example-conversations)
+- [Known limitations and next steps](#known-limitations-and-next-steps)
+- [Use of AI coding assistants](#use-of-ai-coding-assistants)
 
 ---
 
-## Como rodar
+## How to run
 
-### Pré-requisitos
-- Python **3.10+** (desenvolvido e testado com 3.13)
-- Uma chave gratuita da **Gemini API**: em [aistudio.google.com](https://aistudio.google.com), clique em *Get API key* e depois em *Create API key*. Não é preciso cartão de crédito.
+### Requirements
+- Python **3.10+** (developed and tested with 3.13)
+- A free **Gemini API** key: at [aistudio.google.com](https://aistudio.google.com), click *Get API key* and then *Create API key*. No credit card needed.
 
-### Instalação
+### Installation
 ```bash
 git clone https://github.com/Niozin101/emporio-musica-agent.git
 cd emporio-musica-agent
 python -m venv .venv
 ```
 
-Ative o ambiente virtual:
-- **Windows (PowerShell):** `.venv\Scripts\Activate.ps1`. Se aparecer o erro de "execução de scripts desabilitada", rode antes `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`, que vale só para a janela atual.
+Activate the virtual environment:
+- **Windows (PowerShell):** `.venv\Scripts\Activate.ps1`. If you get a "running scripts is disabled" error, first run `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`, which only applies to the current window.
 - **Linux/macOS:** `source .venv/bin/activate`
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### Configuração
-Copie o `.env.example` para `.env` e preencha a chave:
+### Configuration
+Copy `.env.example` to `.env` and fill in the key:
 ```
-GEMINI_API_KEY=sua-chave
+GEMINI_API_KEY=your-key
 MODEL=gemini-3.5-flash
 MODELOS_RESERVA=gemini-3.5-flash-lite,gemini-3.7-flash,gemini-3.1-flash-lite
 DATA_REFERENCIA=
 ```
 
-| Variável | Para que serve |
+| Variable | Purpose |
 |---|---|
-| `GEMINI_API_KEY` | Chave da Gemini API (obrigatória) |
-| `MODEL` | Modelo principal |
-| `MODELOS_RESERVA` | Modelos usados se o principal estiver sem cota ou sobrecarregado (ver [Resiliência](#resiliência-no-plano-gratuito)) |
-| `DATA_REFERENCIA` | Opcional. Data usada como "hoje" (`AAAA-MM-DD`) para simular prazos de pedidos. Vazio = data atual |
+| `GEMINI_API_KEY` | Gemini API key (required) |
+| `MODEL` | Main model |
+| `MODELOS_RESERVA` | Fallback models, used when the main one is out of quota or overloaded (see [Resilience](#4-resilience-on-the-free-tier)) |
+| `DATA_REFERENCIA` | Optional. Date used as "today" (`YYYY-MM-DD`) to simulate order deadlines. Empty = current date |
 
-### Uso
+### Usage
 ```bash
-python main.py              # conversa interativa
-python main.py --debug      # mostra, em tempo real, as ferramentas que o agente chama
-python main.py --roteiro examples/roteiros/04_devolucao_arrependimento.txt   # roda uma conversa pronta
+python main.py              # interactive conversation
+python main.py --debug      # shows, in real time, the tools the agent calls
+python main.py --roteiro examples/roteiros/04_devolucao_arrependimento.txt   # runs a scripted conversation
 ```
-Na conversa interativa, `/nova` recomeça o atendimento e `/sair` encerra. Toda conversa é salva em Markdown em `logs/conversas/`. As conversas de roteiro são salvas em `examples/`.
+In the interactive mode, `/nova` starts a new conversation and `/sair` quits. Every conversation is saved as Markdown in `logs/conversas/`. Scripted conversations are saved in `examples/`.
 
-### Interface web (opcional)
+### Web interface (optional)
 ```bash
 streamlit run app.py
 ```
-Abre em `http://localhost:8501` um chat com cartões de atalho, perguntas de exemplo e, embaixo de cada resposta, **"Consultas feitas"**: as ferramentas que a Lia chamou para responder. A paleta de cores foi extraída do design do manual de políticas da loja (azul petróleo `#1A5276`, azul médio `#2E86C1` e âmbar `#F39C12`), para a interface seguir a identidade visual do material oficial. O manual não traz um guia de marca; as cores foram inferidas do próprio PDF.
+Opens at `http://localhost:8501`: a chat with shortcut cards, sample questions and, under each answer, **"Consultas feitas"** (lookups made), listing the tools Lia called to answer. The color palette was extracted from the design of the store's policy manual (petrol blue `#1A5276`, medium blue `#2E86C1` and amber `#F39C12`), so the interface follows the visual identity of the store's official material. The manual has no brand guide; the colors were inferred from the PDF itself.
 
 ---
 
-## Arquitetura
+## Architecture
 
 ```
-                ┌──────────────┐
- Cliente ──────▶│   main.py    │  CLI (interativa ou roteiro) + transcrição em Markdown
-                └──────┬───────┘
-                       ▼
-                ┌──────────────┐   system prompt (persona + regras + data/hora/loja aberta)
-                │ src/agent.py │──────────────────────────────────────────▶ Gemini (function calling)
-                └──────┬───────┘   novas tentativas + troca de modelo
-                       │ o modelo decide qual ferramenta chamar
+                ┌──────────────────┐
+ Customer ─────▶│ main.py / app.py │  CLI (interactive or scripted) / Streamlit web chat
+                └────────┬─────────┘
+                         ▼
+                ┌──────────────┐   system prompt (persona + rules + date/time/store open)
+                │ src/agent.py │◀─────────────────────────────────────────▶ Gemini (function calling)
+                └──────┬───────┘   step-by-step tool loop, retries, model fallback
+                       │ executes the tool the model asked for
           ┌────────────┴─────────────┐
           ▼                          ▼
  ┌─────────────────┐       ┌───────────────────┐
  │  src/tools.py   │       │  src/policies.py  │
- │ buscar_produtos │       │ consultar_politica│ ◀── PDF do manual dividido em 10 seções
+ │ buscar_produtos │       │ consultar_politica│ ◀── policy PDF split into 10 sections
  │ detalhes_produto│       └───────────────────┘
  │ consultar_pedido│
  │ listar_promocoes│
@@ -98,163 +103,167 @@ Abre em `http://localhost:8501` um chat com cartões de atalho, perguntas de exe
  └────────┬────────┘
           ▼
  ┌─────────────────────┐
- │ src/data_loader.py  │ ◀── CSVs: limpeza, junções, preço final, divergências
+ │ src/data_loader.py  │ ◀── CSVs: cleaning, joins, final price, inconsistency checks
  └─────────────────────┘
 ```
 
-| Arquivo | Responsabilidade |
+The model never touches the data directly: it can only ask for one of the tools we defined, and the code decides what to return.
+
+| File | Responsibility |
 |---|---|
-| `src/data_loader.py` | Lê os CSVs uma vez (cache) e entrega os dados tratados: produtos com categoria, specs em dicionário, disponibilidade e preço com promoção; pedidos com itens, cliente e checagem de total |
-| `src/tools.py` | Ferramentas de dados que o agente chama. Todo cálculo (preço no PIX, parcelamento, prazos de troca, atraso) é feito aqui |
-| `src/policies.py` | Extrai o manual em PDF, divide nas 10 seções e expõe a ferramenta `consultar_politica` |
-| `src/prompts.py` | System prompt da persona Lia e o contexto dinâmico (data, hora, loja aberta ou fechada) |
-| `src/agent.py` | Laço de ferramentas com o Gemini (passo a passo), histórico da conversa, novas tentativas, troca de modelo e verificação anti-alucinação |
-| `main.py` | Interface de linha de comando e transcrição das conversas |
-| `app.py` | Interface web (Streamlit), com as ferramentas chamadas visíveis em cada resposta |
+| `src/data_loader.py` | Reads the CSVs once (cached) and returns clean data: products with category, specs as dictionaries, availability and promotional price; orders with items, customer and a total check |
+| `src/tools.py` | Data tools the agent calls. Every calculation (PIX price, installments, return deadlines, delivery delay) happens here |
+| `src/policies.py` | Extracts the PDF manual, splits it into its 10 sections and exposes the `consultar_politica` tool |
+| `src/prompts.py` | System prompt for the Lia persona and the dynamic context (date, time, whether the store is open) |
+| `src/agent.py` | Step-by-step tool loop with Gemini, conversation history, retries, model fallback and anti-hallucination check |
+| `main.py` | Command-line interface and conversation transcripts |
+| `app.py` | Web interface (Streamlit), with the tools called visible under each answer |
+
+Tool names, in English: `buscar_produtos` = search products, `detalhes_produto` = product details, `consultar_pedido` = look up an order, `listar_promocoes` = list promotions, `registrar_reclamacao` = file a complaint, `consultar_politica` = look up a policy.
 
 ---
 
-## Decisões técnicas
+## Technical decisions
 
-### 1. Abordagem: function calling (ferramentas tipadas)
-O agente é um LLM com **ferramentas Python bem definidas**. O próprio modelo decide, a cada mensagem, se precisa consultar dados (produtos, pedidos, promoções), consultar políticas ou só conversar.
+### 1. Approach: function calling (typed tools)
+The agent is an LLM with **well-defined Python tools**. On each message, the model itself decides whether it needs to look up data (products, orders, promotions), look up policies, or just talk.
 
-Alternativas consideradas:
-- **Agente de SQL / pandas (text-to-SQL):** mais flexível, mas o modelo poderia gerar consultas erradas ou expor dados de outros clientes. Com ferramentas fechadas, a **verificação de identidade é garantida pelo código**, e não pelo prompt.
-- **Colocar todos os dados no prompt:** inviável conforme o catálogo cresce, além de induzir o modelo a calcular preços e datas.
+Alternatives considered:
+- **SQL / pandas agent (text-to-SQL):** more flexible, but the model could write wrong queries or expose other customers' data. With closed tools, **identity verification is enforced by code**, not by the prompt.
+- **Putting all the data in the prompt:** does not scale as the catalog grows, and invites the model to compute prices and dates.
 
-**Princípio adotado: o LLM redige, o código calcula.** Preço com desconto, preço no PIX, número máximo de parcelas, prazos de arrependimento, troca e garantia, e atraso de entrega são calculados em Python e entregues prontos ao modelo. O manual diz que informação de preço errada "pode configurar propaganda enganosa", e LLMs erram aritmética e datas.
+**Guiding principle: the LLM writes, the code computes.** Discounted price, PIX price, maximum number of installments, return and warranty deadlines, and delivery delays are computed in Python and handed to the model ready to use. The manual says that wrong price information "may constitute false advertising", and LLMs make arithmetic and date mistakes.
 
-### 2. Políticas: índice por seção em vez de RAG vetorial
-O manual tem 8 páginas e já vem organizado em seções numeradas. Ele é extraído com `pypdf` (modo *layout*, que preserva as tabelas), limpo de cabeçalhos e rodapés, e dividido em 10 tópicos (`formas_de_pagamento`, `trocas_e_devolucoes`, etc.). O agente chama `consultar_politica(topico)` quando precisa de uma regra.
+### 2. Policies: section index instead of vector RAG
+The manual has 8 pages and is already organized into numbered sections. It is extracted with `pypdf` (in *layout* mode, which preserves the tables), stripped of headers and footers, and split into 10 topics (`formas_de_pagamento`, `trocas_e_devolucoes`, etc.). The agent calls `consultar_politica(topico)` when it needs a rule.
 
-- **Determinístico:** sempre traz a seção inteira e correta, sem o risco de um *chunk* irrelevante vindo da busca vetorial.
-- **Rastreável:** os logs mostram exatamente qual seção embasou cada resposta.
-- **Sem dependências extras** (banco vetorial, modelo de embeddings).
-- O PDF continua sendo a fonte da verdade: se o manual for atualizado, basta trocar o arquivo.
+- **Deterministic:** it always returns the whole, correct section, with no risk of an irrelevant chunk from a vector search.
+- **Traceable:** the logs show exactly which section backed each answer.
+- **No extra dependencies** (vector database, embedding model).
+- The PDF remains the source of truth: if the manual is updated, just replace the file.
 
-Com um manual de centenas de páginas, eu migraria para RAG híbrido (BM25 + embeddings) com *chunking* por seção.
+With a manual of hundreds of pages, I would move to hybrid RAG (BM25 + embeddings) with section-based chunking.
 
-### 3. Modelo e provedor: Gemini Flash (plano gratuito)
-- **Custo zero e reprodutível:** qualquer avaliador roda o projeto com uma chave gratuita, sem cartão.
-- **Bom suporte a function calling e a português**, com SDK oficial (`google-genai`) que monta o schema de cada ferramenta a partir da função Python: nome, docstring e tipos viram a descrição que o modelo lê.
-- Versão **fixada** (`gemini-3.5-flash`) em vez de `*-latest`, para o comportamento não mudar sem aviso.
-- `temperature=0.3`, para respostas consistentes sem perder a naturalidade.
+### 3. Model and provider: Gemini Flash (free tier)
+- **Zero cost and reproducible:** any reviewer can run the project with a free key, no credit card.
+- **Good function calling and Portuguese support**, with an official SDK (`google-genai`) that builds each tool's schema from the Python function: its name, docstring and type hints become the description the model reads.
+- **Pinned version** (`gemini-3.5-flash`) instead of `*-latest`, so behavior does not change without notice.
+- `temperature=0.3`, for consistent answers that still sound natural.
 
-Também avaliei a API do Claude (Anthropic). Seria mais estável que o plano gratuito, mas exige crédito pré-pago. Como só `src/agent.py` conversa com o provedor, trocar de LLM exige mudar apenas esse arquivo.
+I also considered the Claude API (Anthropic). It would be more stable than a free tier, but requires prepaid credit. Since only `src/agent.py` talks to the provider, switching LLMs only requires changing that file.
 
-### 4. Resiliência no plano gratuito
-Durante o desenvolvimento, o plano gratuito mostrou **cota de ~20 requisições por dia por modelo** e erros frequentes de sobrecarga (503) e de tempo esgotado (504). Para o atendimento não travar:
-1. **Timeout de 30 segundos** por requisição.
-2. **Novas tentativas com espera** (2s e 5s) para erros transitórios (429, 500, 503, 504 e timeouts de rede).
-3. **Troca automática de modelo:** se a cota diária acabar ou o modelo continuar falhando, a conversa segue no próximo modelo de `MODELOS_RESERVA`, **levando o histórico**. Cada modelo tem a sua própria cota.
-4. Se tudo falhar, o cliente recebe uma mensagem educada, em vez de um erro técnico.
+### 4. Resilience on the free tier
+During development, the free tier showed a **quota of ~20 requests per day per model** and frequent overload (503) and timeout (504) errors. To keep the service from hanging:
+1. **30-second timeout** per request.
+2. **Retries with backoff** (2s and 5s) for transient errors (429, 500, 503, 504 and network timeouts).
+3. **Automatic model fallback:** if the daily quota runs out or the model keeps failing, the conversation continues on the next model in `MODELOS_RESERVA`, **keeping the history**. Each model has its own quota.
+4. If everything fails, the customer gets a polite message instead of a technical error.
 
-**Um bug real que mudou a arquitetura do laço de ferramentas.** A primeira versão usava o modo automático do SDK, que executa o ciclo inteiro ("modelo pede ferramenta → código executa → modelo responde") numa única chamada. Ao gerar os exemplos, uma falha 503 **no meio** desse ciclo descartava também o resultado da ferramenta já executada. A nova tentativa recomeçava sem os dados, e o modelo reserva **respondeu com preços inventados** (Tagima Dallas por R$ 890 em vez de R$ 749). A correção:
-- **Laço de ferramentas escrito no `agent.py`**, passo a passo. Cada passo é repetido isoladamente, e os resultados das ferramentas ficam guardados na conversa, então uma falha nunca apaga o que já foi consultado. Isso também evita executar duas vezes uma ferramenta com efeito, como `registrar_reclamacao`.
-- **Verificação anti-alucinação:** se uma resposta cita valores em R$ e nenhuma ferramenta foi consultada na conversa, o agente pede ao modelo uma nova resposta, consultando as ferramentas. É uma defesa extra, que não depende do prompt.
+**A real bug that changed the tool-loop architecture.** The first version used the SDK's automatic mode, which runs the whole cycle ("model asks for a tool → code runs it → model answers") in a single call. While generating the examples, a 503 error **in the middle** of that cycle also discarded the result of the tool that had already run. The retry started over without the data, and the fallback model **answered with made-up prices** (Tagima Dallas for R$ 890 instead of R$ 749). The fix:
+- **Tool loop written in `agent.py`**, step by step. Each step is retried on its own, and tool results stay in the conversation, so a failure never erases what was already looked up. This also avoids running a tool with side effects, such as `registrar_reclamacao`, twice.
+- **Anti-hallucination check:** if an answer quotes R$ amounts and no tool has been called in the conversation, the agent asks the model to answer again using the tools. It is an extra safeguard that does not depend on the prompt.
 
-Os dois mecanismos foram testados com falhas simuladas (sem gastar cota) antes de voltar à API real.
+Both mechanisms were tested with simulated failures (without spending quota) before going back to the real API.
 
-### 5. Estratégia de prompt
-O system prompt (`src/prompts.py`) segue as diretrizes da seção 7 do manual:
-- **Persona:** Lia, tom "informal mas profissional, como um amigo que entende de música", mensagens curtas em formato de chat.
-- **Regra central:** "você NÃO sabe de memória preços, estoque, promoções, pedidos ou regras". Há um mapa explícito de qual ferramenta usar para cada tipo de pergunta.
-- **Regras de apresentação do manual:** promoção sempre com preço original, percentual de desconto e preço final; produto sem estoque ou descontinuado vem com alternativas.
-- **Escopo:** acessórios são redirecionados com gentileza; assuntos fora da loja são recusados em uma frase; tentativas de mudar o papel do agente são ignoradas.
-- **Contexto dinâmico calculado em código:** data, hora e se a loja está **aberta ou fechada** (com o horário de reabertura), para cumprir a regra de "fora do expediente, informar o horário de retorno".
+### 5. Prompt strategy
+The system prompt (`src/prompts.py`) follows the guidelines in section 7 of the manual:
+- **Persona:** Lia, with an "informal but professional tone, like a friend who knows music", short chat-style messages.
+- **Core rule:** "you do NOT know prices, stock, promotions, orders or rules from memory". It includes an explicit map of which tool to use for each kind of question.
+- **Presentation rules from the manual:** promotions always show the original price, the discount percentage and the final price; out-of-stock or discontinued products come with alternatives.
+- **Scope:** accessories are politely redirected; off-topic requests are declined in one sentence; attempts to change the agent's role are ignored. Lia informs and guides but does not perform operations (returns, exchanges, sales); the only action she takes is filing complaints.
+- **Dynamic context computed in code:** date, time and whether the store is **open or closed** (with the reopening time), to follow the rule "outside business hours, tell the customer when the team is back".
 
-### 6. Segurança e privacidade (LGPD)
-- `consultar_pedido` exige **número do pedido + e-mail ou telefone cadastrado**. A verificação acontece no código.
-- "Pedido inexistente" e "dados não conferem" retornam **a mesma mensagem**, para não revelar quais pedidos existem.
-- Campos marcados como `aviso_interno` orientam o agente sem serem mostrados ao cliente.
+### 6. Security and privacy (LGPD, Brazil's data protection law)
+- `consultar_pedido` requires the **order number + the registered email or phone number**. The check happens in code.
+- "Order does not exist" and "data does not match" return **the same message**, so nobody can find out which orders exist.
+- Fields marked `aviso_interno` (internal notice) guide the agent without being shown to the customer.
 
-### 7. Histórico de conversa
-- **Dentro da sessão:** o objeto de chat do SDK mantém o histórico, então o cliente pode fazer perguntas de acompanhamento ("e no PIX?", "como funciona o reembolso?").
-- **Entre sessões:** não há memória persistente. Num atendimento por mensagens, cada contato costuma ser independente, e guardar conversas exigiria política de retenção (LGPD). As conversas são **salvas em Markdown** em `logs/` apenas para auditoria e depuração.
-- Reclamações são registradas em `logs/reclamacoes.jsonl` com um protocolo, simulando o encaminhamento para a equipe.
+### 7. Conversation history
+- **Within a session:** the agent keeps the history (messages, tool calls and results) in its own list, so the customer can ask follow-up questions ("and with PIX?", "how does the refund work?").
+- **Across sessions:** there is no persistent memory. In message-based support each contact is usually independent, and storing conversations would require a retention policy (LGPD). Conversations are **saved as Markdown** in `logs/` for auditing and debugging only.
+- Complaints are stored in `logs/reclamacoes.jsonl` with a ticket number, simulating a handoff to the team.
 
 ### 8. Interfaces: CLI + Streamlit
-O foco do desafio é o agente. A CLI tem modo interativo, modo `--debug` (mostra as ferramentas chamadas em tempo real) e modo `--roteiro`, que gera as conversas de exemplo de forma reprodutível. A interface web em Streamlit reaproveita o mesmo `AgenteEmporio`, sem mudar nada no agente, e torna visível a decisão central do desafio: em cada resposta, quais ferramentas de dados ou de políticas a Lia consultou. O agente e o histórico ficam em `st.session_state`, então cada aba do navegador tem sua própria conversa.
+The focus of the challenge is the agent. The CLI has an interactive mode, a `--debug` mode (shows the tools called in real time) and a `--roteiro` (script) mode that generates the example conversations reproducibly. The Streamlit web interface reuses the same `AgenteEmporio`, without changing the agent, and makes the central decision of the challenge visible: in each answer, which data or policy tools Lia consulted. The agent and its history live in `st.session_state`, so each browser tab has its own conversation.
 
 ---
 
-## Tratamento dos dados e inconsistências encontradas
+## Data handling and inconsistencies found
 
-### Dados operacionais (CSVs)
-| Problema | Tratamento |
+### Operational data (CSVs)
+| Issue | Handling |
 |---|---|
-| `specs` é um JSON em texto, com esquemas diferentes por categoria | Convertido para dicionário; a busca pesquisa nos valores |
-| Produtos `discontinued`, `coming_soon` e com estoque 0 | **Mantidos**, com uma `situacao` legível ("Fora de linha", "Em breve", "Temporariamente sem estoque"), para o agente explicar e sugerir alternativas, como pede o manual |
-| Descrições de baixos, baterias e teclados citam **outra marca/modelo** (ex.: "Music Man Bass 1X" descrito como "Fender Jazz Bass"; "Korg Synth 1" descrito como "Roland de 88 teclas", mas com 61 teclas nas specs) | Descrição descartada nessas categorias; o agente usa só nome + specs |
-| Promoções duplicadas por produto e promoções inativas | Só valem as `is_active = 1`; se houver mais de uma ativa para o mesmo produto, vale a de maior desconto (promoções não são cumulativas) |
-| Pedidos 3 e 20: total registrado ≠ soma dos itens (R$ 3.450 vs. R$ 3.498; R$ 1.400 vs. R$ 1.488) | Coluna `total_confere`; o agente informa o total registrado e encaminha questionamentos à equipe |
-| Pedidos 3 e 14 contêm um produto `coming_soon` | Mantidos como estão (registro histórico) |
-| Pedidos 9 e 16 parcelados em 6x com parcela abaixo do mínimo de R$ 80 | Registro histórico mantido; a regra vale para novos cálculos de parcelamento |
-| Categorias 6, 7 e 8 (sopros e cordas orquestrais) sem produtos | A busca conhece os sinônimos dessas categorias e retorna "nenhum produto", em vez de trazer itens de outra categoria |
-| Busca do cliente com ou sem acento, no singular ou no plural ("violao", "violões") | Normalização (minúsculas, sem acentos) + sinônimos por categoria + palavras irrelevantes ignoradas ("de", "com"...) |
+| `specs` is JSON stored as text, with a different schema per category | Converted to a dictionary; search also looks at its values |
+| `discontinued` and `coming_soon` products, and products with zero stock | **Kept**, with a readable status ("out of the catalog", "coming soon", "temporarily out of stock"), so the agent can explain and suggest alternatives, as the manual requires |
+| Descriptions of basses, drums and keyboards mention **a different brand/model** (e.g., "Music Man Bass 1X" described as a "Fender Jazz Bass"; "Korg Synth 1" described as an "88-key Roland", while its specs say 61 keys) | Description dropped for these categories; the agent uses only name + specs |
+| Duplicate promotions per product and inactive promotions | Only `is_active = 1` counts; if a product has more than one active promotion, the largest discount wins (promotions do not stack) |
+| Orders 3 and 20: recorded total ≠ sum of items (R$ 3,450 vs. R$ 3,498; R$ 1,400 vs. R$ 1,488) | `total_confere` column; the agent reports the recorded total and refers questions about it to the team |
+| Orders 3 and 14 contain a `coming_soon` product | Kept as is (historical record) |
+| Orders 9 and 16 paid in 6 installments below the R$ 80 minimum | Historical record kept; the rule applies to new installment calculations |
+| Categories 6, 7 and 8 (woodwinds, brass and orchestral strings) have no products | Search knows the synonyms for these categories and returns "no products", instead of items from another category |
+| Customer searches with or without accents, singular or plural ("violao", "violões") | Normalization (lowercase, no accents) + category synonyms + stop words ignored ("de", "com"...) |
 
-### Manual de políticas (PDF)
-| Problema | Interpretação adotada |
+### Policy manual (PDF)
+| Issue | Interpretation adopted |
 |---|---|
-| Dois telefones: (67) 3341-4444 (capa e dados da empresa) e (67) 3321-4500 (seção de WhatsApp) | (67) 3341-4444 como oficial, por aparecer nas fontes cadastrais |
-| E-mail com acento em um trecho (`contato@empóriodamusica.com.br`) | Considerado erro de digitação; vale `contato@emporiodamusica.com.br` |
-| "Até 3x sem valor mínimo de parcela (exceto abaixo de R$ 50,00)" | Parcela mínima de R$ 50,00 até 3x |
-| "Mais de 300 instrumentos, incluindo sopros e cordas orquestrais", mas o catálogo tem 65 itens e nenhum sopro | O catálogo do sistema prevalece sobre o texto institucional |
+| Two phone numbers: (67) 3341-4444 (cover and company data) and (67) 3321-4500 (WhatsApp section) | (67) 3341-4444 as the official one, since it appears in the company records |
+| Email with an accent in one place (`contato@empóriodamusica.com.br`) | Treated as a typo; `contato@emporiodamusica.com.br` is used |
+| "Up to 3x with no minimum installment (except below R$ 50.00)" | Minimum installment of R$ 50.00 for up to 3x |
+| "Over 300 instruments, including woodwinds and orchestral strings", but the catalog has 65 items and no woodwinds | The system's catalog prevails over the institutional text |
 
-Essas interpretações são devolvidas ao agente junto com a seção do manual (`nota_de_interpretacao`).
+These interpretations are returned to the agent along with the manual section (`nota_de_interpretacao`).
 
-### Suposições
-- **Data de recebimento = previsão de entrega.** O CSV não tem a data real de recebimento, e os prazos de arrependimento e garantia contam a partir dela.
-- **Data de referência:** todos os pedidos são de 2025 e 2026, então na data atual já passaram dos prazos. `DATA_REFERENCIA` permite simular "hoje" e demonstrar casos dentro do prazo.
-- **Status `pending`** = aguardando confirmação do pagamento; **`confirmed`** = pagamento aprovado e em separação.
-- **Frete para outras cidades** não é calculado (depende de CEP, peso e dimensões); o agente informa as modalidades e prazos do manual.
+### Assumptions
+- **Delivery date = estimated delivery date.** The CSV has no actual delivery date, and the return and warranty deadlines count from it.
+- **Reference date:** all orders are from 2025 and 2026, so as of today their deadlines have passed. `DATA_REFERENCIA` simulates "today" to demonstrate cases within the deadline.
+- **Status `pending`** = awaiting payment confirmation; **`confirmed`** = payment approved and being prepared.
+- **Shipping to other cities** is not calculated (it depends on ZIP code, weight and dimensions); the agent gives the shipping options and lead times from the manual.
 
 ---
 
-## Exemplos de conversa
+## Example conversations
 
-Gerados com `python main.py --roteiro examples/roteiros/<arquivo>.txt`. Cada exemplo mostra as ferramentas chamadas (🔧) e, no final, quais modelos geraram as respostas. No dia da geração, a cota diária do modelo principal tinha acabado com os testes, então a maior parte das respostas veio do reserva `gemini-3.5-flash-lite`, pela troca automática de modelo. Todos os preços, parcelas e prazos dos exemplos foram conferidos com os dados.
+Generated with `python main.py --roteiro examples/roteiros/<file>.txt`. Each example shows the tools called (🔧) and, at the end, which models generated the answers. The conversations are in Portuguese, the language customers use with Lia. On the day they were generated, the main model's daily quota had run out during testing, so most answers came from the fallback `gemini-3.5-flash-lite`, through the automatic model fallback. Every price, installment and deadline in the examples was checked against the data.
 
-| # | Cenário | O que demonstra |
+| # | Scenario | What it shows |
 |---|---|---|
-| [01](examples/01_catalogo_violoes.md) | Violões até R$ 1.000 | Busca com filtros (categoria, preço, disponibilidade), recomendação e PIX/parcelamento |
-| [02](examples/02_preco_e_promocao.md) | Preço e promoção | Preço com promoção, regra de não cumulatividade do PIX, produto sem estoque com alternativas |
-| [03](examples/03_informacoes_e_fora_de_escopo.md) | Informações e fora do escopo | Consulta ao manual (endereço, horário), acessórios, categoria inexistente e assunto fora da loja |
-| [04](examples/04_devolucao_arrependimento.md) | **Devolução por arrependimento** | Verificação de identidade, prazo calculado em código e aplicação da política de trocas |
-| [05](examples/05_pedido_atrasado_reclamacao.md) | **Pedido atrasado + reclamação** | Dados não conferem (nada é revelado), atraso detectado e reclamação registrada com protocolo |
+| [01](examples/01_catalogo_violoes.md) | Acoustic guitars up to R$ 1,000 | Filtered search (category, price, availability), recommendation, PIX price and installments |
+| [02](examples/02_preco_e_promocao.md) | Price and promotion | Promotional price, the rule that the PIX discount does not stack with promotions, out-of-stock product with alternatives |
+| [03](examples/03_informacoes_e_fora_de_escopo.md) | Store info and out-of-scope questions | Manual lookup (address, hours), accessories, a category the store does not carry, and an off-topic request |
+| [04](examples/04_devolucao_arrependimento.md) | **Return within the cooling-off period** | Identity verification, deadline computed in code, and the return policy applied |
+| [05](examples/05_pedido_atrasado_reclamacao.md) | **Late order + complaint** | Mismatched data (nothing is revealed), delay detected, complaint filed with a ticket number |
 
 ---
 
-## Limitações conhecidas e próximos passos
+## Known limitations and next steps
 
-**Limitações**
-- **Plano gratuito do Gemini:** cota baixa (~20 requisições/dia por modelo) e instabilidade em horários de pico. Os modelos *lite* de reserva respondem bem, mas seguem as regras com menos rigor que o principal. Além disso, no plano gratuito o Google pode usar os dados enviados para treinar modelos. Aqui os dados são fictícios; em produção, seria preciso o plano pago.
-- **Feriados** não são considerados no cálculo de "loja aberta".
-- **Fuso horário:** usa o relógio da máquina. Em produção, fixaria `America/Campo_Grande`.
-- **Sem memória entre sessões** (decisão consciente; ver [Histórico de conversa](#7-histórico-de-conversa)).
-- **Busca de produtos por palavras-chave:** não entende perguntas vagas como "algo para tocar MPB"; nesses casos, o próprio modelo traduz a intenção em filtros.
-- **Sem testes automatizados** de avaliação das respostas; a validação foi manual, com os roteiros.
+**Limitations**
+- **Gemini free tier:** low quota (~20 requests/day per model) and instability at peak times. The *lite* fallback models answer well but follow the rules less strictly than the main one. Also, on the free tier Google may use the data sent to train its models. The data here is fictional; production would need the paid tier.
+- **Holidays** are not considered when computing "store open".
+- **Time zone:** uses the machine's clock. In production, I would pin `America/Campo_Grande`.
+- **No memory across sessions** (a deliberate choice; see [Conversation history](#7-conversation-history)).
+- **Keyword-based product search:** it does not understand vague requests such as "something to play MPB"; in those cases, the model itself translates the intent into filters.
+- **No automated evaluation** of the answers; validation was manual, with the scripted conversations.
 
-**Com mais tempo, eu faria**
-1. **Avaliação automatizada:** um conjunto de perguntas com respostas esperadas (ferramenta correta chamada, preço correto, recusa de fora do escopo), rodado a cada mudança de prompt, possivelmente com um LLM como avaliador.
-2. **Testes unitários** das ferramentas (preço, parcelamento, prazos, verificação de identidade) com `pytest`.
-3. **Integração real com WhatsApp** (API oficial) e uma API HTTP (FastAPI) na frente do agente.
-4. **Transferência para atendente humano** de verdade, em vez de só registrar a reclamação.
-5. **Observabilidade:** métricas de latência, custo e taxa de uso de cada ferramenta por conversa.
-6. **Banco de dados** (SQLite/Postgres) no lugar dos CSVs, com estoque atualizado em tempo real.
-7. **RAG híbrido** para o manual, se ele crescer.
+**With more time, I would build**
+1. **Automated evaluation:** a set of questions with expected outcomes (right tool called, right price, off-topic declined), run on every prompt change, possibly with an LLM as a judge.
+2. **Unit tests** for the tools (prices, installments, deadlines, identity verification) with `pytest`.
+3. **Real WhatsApp integration** (official API) and an HTTP API (FastAPI) in front of the agent.
+4. **A real handoff to a human agent**, instead of only filing the complaint.
+5. **Observability:** latency, cost and tool-usage metrics per conversation.
+6. **A database** (SQLite/Postgres) instead of the CSVs, with real-time stock.
+7. **Hybrid RAG** for the manual, if it grows.
 
 ---
 
-## Uso de assistentes de código (IA)
+## Use of AI coding assistants
 
-Usei o **Claude Code** (app desktop da Anthropic, modelo Claude Opus) como par de programação durante todo o projeto. O fluxo foi:
+I used **Claude Code** (Anthropic's desktop app, Claude Opus model) as a pair programmer throughout the project. The workflow was:
 
-1. **Análise do problema:** compartilhei o enunciado, os CSVs e o PDF. O Claude resumiu os requisitos e levantou as **inconsistências** listadas acima (descrições trocadas, totais divergentes, telefones duplicados, parcelamento ambíguo), que depois validei.
-2. **Decisões de arquitetura:** discutimos as alternativas (function calling vs. agente de SQL, RAG vetorial vs. índice por seção, Claude vs. Gemini). A escolha do **Gemini gratuito** foi minha, para o projeto ter custo zero e ser reprodutível pelo avaliador.
-3. **Implementação em etapas:** o código foi escrito pelo Claude Code em passos pequenos (dados → ferramentas → políticas → agente → CLI). Em cada etapa, eu revisei, pedi explicações do código e das decisões, e fiz um commit separado, o que se reflete no histórico do repositório.
-4. **Testes e depuração:** o Claude rodou cenários reais contra a API e encontrou problemas que corrigimos juntos: listas numeradas do manual confundidas com seções, o agente deduzindo nomes a partir de e-mails, travamentos por sobrecarga do plano gratuito (o que levou ao mecanismo de novas tentativas e troca de modelo) e, ao gerar os exemplos, **preços inventados** depois de uma falha da API. Esse último caso levou a reescrever o laço de ferramentas e a criar a verificação anti-alucinação. Revisar cada conversa gerada, número por número, foi o que revelou o problema.
-5. **Configuração do ambiente:** também me orientou no setup no Windows (ambiente virtual, política de execução do PowerShell, `.gitignore`, chave de API fora do repositório).
+1. **Problem analysis:** I shared the challenge, the CSVs and the PDF. Claude summarized the requirements and surfaced the **inconsistencies** listed above (swapped descriptions, mismatched totals, duplicate phone numbers, ambiguous installment rules), which I then validated.
+2. **Architecture decisions:** we discussed the alternatives (function calling vs. SQL agent, vector RAG vs. section index, Claude vs. Gemini). Choosing the **free Gemini tier** was my call, so the project costs nothing and the reviewer can reproduce it.
+3. **Step-by-step implementation:** Claude Code wrote the code in small steps (data → tools → policies → agent → CLI → web interface). At each step I reviewed it, asked for explanations of the code and the decisions, and made a separate commit, which is reflected in the repository history.
+4. **Testing and debugging:** Claude ran real scenarios against the API and found problems we fixed together: numbered lists in the manual mistaken for sections, the agent guessing names from email addresses, hangs caused by free-tier overload (which led to the retry and model-fallback mechanism) and, while generating the examples, **made-up prices** after an API failure. That last case led to rewriting the tool loop and adding the anti-hallucination check. Reviewing every generated conversation, number by number, is what revealed the problem.
+5. **Environment setup:** it also guided me through the Windows setup (virtual environment, PowerShell execution policy, `.gitignore`, keeping the API key out of the repository).
 
-**Meu papel:** definir as prioridades e as escolhas de produto, revisar e entender cada parte do código, validar o comportamento do agente e conduzir o versionamento. Na minha avaliação, a IA acelerou muito a implementação e a análise dos dados, mas as decisões e a validação precisaram de julgamento humano: por exemplo, interpretar regras ambíguas do manual e decidir o que fazer com dados inconsistentes.
+**My role:** setting priorities and product choices, reviewing and understanding every part of the code, validating the agent's behavior and managing version control. In my assessment, AI greatly sped up the implementation and the data analysis, but the decisions and the validation required human judgment: for example, interpreting ambiguous rules in the manual and deciding what to do with inconsistent data.
