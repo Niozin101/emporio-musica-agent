@@ -108,7 +108,7 @@ Abre em `http://localhost:8501` um chat com cartões de atalho, perguntas de exe
 | `src/tools.py` | Ferramentas de dados que o agente chama. Todo cálculo (preço no PIX, parcelamento, prazos de troca, atraso) é feito aqui |
 | `src/policies.py` | Extrai o manual em PDF, divide nas 10 seções e expõe a ferramenta `consultar_politica` |
 | `src/prompts.py` | System prompt da persona Lia e o contexto dinâmico (data, hora, loja aberta ou fechada) |
-| `src/agent.py` | Sessão de chat com o Gemini, registro das ferramentas chamadas, novas tentativas e troca de modelo |
+| `src/agent.py` | Laço de ferramentas com o Gemini (passo a passo), histórico da conversa, novas tentativas, troca de modelo e verificação anti-alucinação |
 | `main.py` | Interface de linha de comando e transcrição das conversas |
 | `app.py` | Interface web (Streamlit), com as ferramentas chamadas visíveis em cada resposta |
 
@@ -137,7 +137,7 @@ Com um manual de centenas de páginas, eu migraria para RAG híbrido (BM25 + emb
 
 ### 3. Modelo e provedor: Gemini Flash (plano gratuito)
 - **Custo zero e reprodutível:** qualquer avaliador roda o projeto com uma chave gratuita, sem cartão.
-- **Bom suporte a function calling e a português**, com SDK oficial (`google-genai`) que executa as ferramentas automaticamente a partir das funções Python. Nome, docstring e tipos viram o schema da ferramenta.
+- **Bom suporte a function calling e a português**, com SDK oficial (`google-genai`) que monta o schema de cada ferramenta a partir da função Python: nome, docstring e tipos viram a descrição que o modelo lê.
 - Versão **fixada** (`gemini-3.5-flash`) em vez de `*-latest`, para o comportamento não mudar sem aviso.
 - `temperature=0.3`, para respostas consistentes sem perder a naturalidade.
 
@@ -146,9 +146,15 @@ Também avaliei a API do Claude (Anthropic). Seria mais estável que o plano gra
 ### 4. Resiliência no plano gratuito
 Durante o desenvolvimento, o plano gratuito mostrou **cota de ~20 requisições por dia por modelo** e erros frequentes de sobrecarga (503) e de tempo esgotado (504). Para o atendimento não travar:
 1. **Timeout de 30 segundos** por requisição.
-2. **Novas tentativas com espera** (2s e 5s) para erros transitórios (429, 500, 503, 504).
+2. **Novas tentativas com espera** (2s e 5s) para erros transitórios (429, 500, 503, 504 e timeouts de rede).
 3. **Troca automática de modelo:** se a cota diária acabar ou o modelo continuar falhando, a conversa segue no próximo modelo de `MODELOS_RESERVA`, **levando o histórico**. Cada modelo tem a sua própria cota.
 4. Se tudo falhar, o cliente recebe uma mensagem educada, em vez de um erro técnico.
+
+**Um bug real que mudou a arquitetura do laço de ferramentas.** A primeira versão usava o modo automático do SDK, que executa o ciclo inteiro ("modelo pede ferramenta → código executa → modelo responde") numa única chamada. Ao gerar os exemplos, uma falha 503 **no meio** desse ciclo descartava também o resultado da ferramenta já executada. A nova tentativa recomeçava sem os dados, e o modelo reserva **respondeu com preços inventados** (Tagima Dallas por R$ 890 em vez de R$ 749). A correção:
+- **Laço de ferramentas escrito no `agent.py`**, passo a passo. Cada passo é repetido isoladamente, e os resultados das ferramentas ficam guardados na conversa, então uma falha nunca apaga o que já foi consultado. Isso também evita executar duas vezes uma ferramenta com efeito, como `registrar_reclamacao`.
+- **Verificação anti-alucinação:** se uma resposta cita valores em R$ e nenhuma ferramenta foi consultada na conversa, o agente pede ao modelo uma nova resposta, consultando as ferramentas. É uma defesa extra, que não depende do prompt.
+
+Os dois mecanismos foram testados com falhas simuladas (sem gastar cota) antes de voltar à API real.
 
 ### 5. Estratégia de prompt
 O system prompt (`src/prompts.py`) segue as diretrizes da seção 7 do manual:
@@ -208,7 +214,7 @@ Essas interpretações são devolvidas ao agente junto com a seção do manual (
 
 ## Exemplos de conversa
 
-Gerados com `python main.py --roteiro examples/roteiros/<arquivo>.txt`. Cada exemplo mostra as ferramentas chamadas (🔧).
+Gerados com `python main.py --roteiro examples/roteiros/<arquivo>.txt`. Cada exemplo mostra as ferramentas chamadas (🔧) e, no final, quais modelos geraram as respostas. No dia da geração, a cota diária do modelo principal tinha acabado com os testes, então a maior parte das respostas veio do reserva `gemini-3.5-flash-lite`, pela troca automática de modelo. Todos os preços, parcelas e prazos dos exemplos foram conferidos com os dados.
 
 | # | Cenário | O que demonstra |
 |---|---|---|
@@ -248,7 +254,7 @@ Usei o **Claude Code** (app desktop da Anthropic, modelo Claude Opus) como par d
 1. **Análise do problema:** compartilhei o enunciado, os CSVs e o PDF. O Claude resumiu os requisitos e levantou as **inconsistências** listadas acima (descrições trocadas, totais divergentes, telefones duplicados, parcelamento ambíguo), que depois validei.
 2. **Decisões de arquitetura:** discutimos as alternativas (function calling vs. agente de SQL, RAG vetorial vs. índice por seção, Claude vs. Gemini). A escolha do **Gemini gratuito** foi minha, para o projeto ter custo zero e ser reprodutível pelo avaliador.
 3. **Implementação em etapas:** o código foi escrito pelo Claude Code em passos pequenos (dados → ferramentas → políticas → agente → CLI). Em cada etapa, eu revisei, pedi explicações do código e das decisões, e fiz um commit separado, o que se reflete no histórico do repositório.
-4. **Testes e depuração:** o Claude rodou cenários reais contra a API e encontrou problemas que corrigimos juntos: listas numeradas do manual confundidas com seções, o agente deduzindo nomes a partir de e-mails, travamentos por sobrecarga do plano gratuito (o que levou ao mecanismo de novas tentativas e troca de modelo).
+4. **Testes e depuração:** o Claude rodou cenários reais contra a API e encontrou problemas que corrigimos juntos: listas numeradas do manual confundidas com seções, o agente deduzindo nomes a partir de e-mails, travamentos por sobrecarga do plano gratuito (o que levou ao mecanismo de novas tentativas e troca de modelo) e, ao gerar os exemplos, **preços inventados** depois de uma falha da API. Esse último caso levou a reescrever o laço de ferramentas e a criar a verificação anti-alucinação. Revisar cada conversa gerada, número por número, foi o que revelou o problema.
 5. **Configuração do ambiente:** também me orientou no setup no Windows (ambiente virtual, política de execução do PowerShell, `.gitignore`, chave de API fora do repositório).
 
 **Meu papel:** definir as prioridades e as escolhas de produto, revisar e entender cada parte do código, validar o comportamento do agente e conduzir o versionamento. Na minha avaliação, a IA acelerou muito a implementação e a análise dos dados, mas as decisões e a validação precisaram de julgamento humano: por exemplo, interpretar regras ambíguas do manual e decidir o que fazer com dados inconsistentes.
