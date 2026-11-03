@@ -30,7 +30,7 @@ class Transcricao:
         self.arquivo = arquivo or PASTA_CONVERSAS / f"{datetime.now():%Y%m%d-%H%M%S}.md"
         self.arquivo.parent.mkdir(parents=True, exist_ok=True)
         self.arquivo.write_text("", encoding="utf-8")
-        cabecalho = f"_Modelo: {modelo} | Gerado em {datetime.now():%d/%m/%Y %H:%M}"
+        cabecalho = f"_Modelo principal: {modelo} | Gerado em {datetime.now():%d/%m/%Y %H:%M}"
         if os.getenv("DATA_REFERENCIA"):
             cabecalho += f" | Data de referência simulada: {os.environ['DATA_REFERENCIA']}"
         self._escrever(f"# {titulo}\n\n{cabecalho}_\n\n> 🔧 indica as ferramentas que o agente chamou para responder.\n")
@@ -42,9 +42,14 @@ class Transcricao:
     def registrar(self, mensagem: str, resposta) -> None:
         self._escrever(f"**Cliente:** {mensagem}\n")
         if resposta.ferramentas:
-            chamadas = "\n".join(f"> 🔧 `{c}`" for c in resposta.ferramentas)
+            # Dois espaços no fim da linha = quebra de linha no Markdown (senão as linhas se juntam).
+            chamadas = "  \n".join(f"> 🔧 `{c}`" for c in resposta.ferramentas)
             self._escrever(chamadas + "\n")
         self._escrever(f"**Lia:** {resposta.texto}\n")
+
+    def finalizar(self, modelos_usados: list[str]) -> None:
+        if modelos_usados:
+            self._escrever(f"---\n\n_Modelos que geraram as respostas: {', '.join(modelos_usados)}_")
 
 
 def conversar(agente: AgenteEmporio, mensagens, transcricao: Transcricao) -> int:
@@ -71,6 +76,7 @@ def conversar(agente: AgenteEmporio, mensagens, transcricao: Transcricao) -> int
         falhas += any(f.startswith("ERRO API") for f in resposta.ferramentas)
         print(f"Lia: {resposta.texto}\n")
         transcricao.registrar(mensagem, resposta)
+    transcricao.finalizar(agente.modelos_usados)
     print(f"(conversa salva em {transcricao.arquivo})")
     return falhas
 
